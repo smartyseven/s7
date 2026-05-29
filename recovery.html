@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recuperación de Datos</title>
+<style>
+body{font-family:Arial,sans-serif;padding:20px;background:#f5f5f5}
+h2{color:#1B5E20}
+button{background:#1B5E20;color:#fff;border:none;padding:12px 20px;border-radius:6px;font-size:15px;margin:6px;cursor:pointer}
+#info{background:#fff;border:1px solid #ddd;border-radius:6px;padding:14px;margin-top:14px;font-size:13px}
+</style>
+</head>
+<body>
+<h2>Recuperación de Datos — Escuela México</h2>
+<div id="info">Presiona el botón para ver qué datos hay en este dispositivo.</div>
+<br>
+<button onclick="verificar()">Verificar datos</button>
+<button onclick="descargar()" id="btn-dl" style="display:none;background:#1565C0">Descargar datos</button>
+
+<script>
+function verificar(){
+  var raw = localStorage.getItem('escuela_db');
+  var info = document.getElementById('info');
+  if(!raw){ info.innerHTML='<b style="color:red">SIN DATOS</b> — Este dispositivo no tiene datos guardados.'; return; }
+  var d;
+  try{ d=JSON.parse(raw); }catch(e){ info.innerHTML='<b style="color:red">Error al leer datos</b>'; return; }
+  var alumnos = d.alumnos ? Object.values(d.alumnos) : [];
+  var total = alumnos.length;
+  var conNotas = alumnos.filter(function(a){ return a.notas && Object.keys(a.notas).length>0; }).length;
+  var ts = d._ts ? new Date(d._ts).toLocaleString('es-CL') : 'desconocida';
+  info.innerHTML = '<b style="color:green">DATOS ENCONTRADOS</b><br><br>'
+    + 'Última actualización: <b>' + ts + '</b><br>'
+    + 'Total alumnos: <b>' + total + '</b><br>'
+    + 'Alumnos con notas: <b>' + conNotas + '</b><br><br>'
+    + (conNotas > 0 ? '<b style="color:green">Este dispositivo tiene notas. Descarga el archivo.</b>' : '<b style="color:orange">Los alumnos no tienen notas guardadas aquí.</b>');
+  if(total > 0) document.getElementById('btn-dl').style.display='inline-block';
+}
+
+function descargar(){
+  var raw = localStorage.getItem('escuela_db');
+  if(!raw){ alert('Sin datos'); return; }
+  var blob = new Blob([raw], {type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'recuperacion_datos.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+</script>
+</body>
+</html>
