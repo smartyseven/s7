@@ -1338,6 +1338,20 @@ function _fbSaveAlumnoOnly(id){
     .catch(function(e){ _fbOwnSave=false; console.error('Firebase saveAlumno:',e); });
 }
 
+// Guarda solo el alumno actual en localStorage + programa push a Firebase (con debounce)
+// Usar en lugar de saveDB() para todas las ediciones de un solo alumno
+let _fbAutoSaveTimer=null;
+function _saveCurrentAlumno(){
+  if(!currentId||!db.alumnos[currentId]) return;
+  db._ts=Date.now();
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(ex){}
+  // Debounce: solo pushear a Firebase después de 4 segundos sin cambios
+  if(_fbAutoSaveTimer) clearTimeout(_fbAutoSaveTimer);
+  _fbAutoSaveTimer=setTimeout(function(){
+    _fbSaveAlumnoOnly(currentId);
+  },4000);
+}
+
 // ═══ FIREBASE CORE ═══
 function getFBConfig(){
   try{return JSON.parse(localStorage.getItem('firebaseCfg')||'null');}catch(e){return null;}
@@ -1819,6 +1833,8 @@ document.getElementById('sb-list').addEventListener('click',function(e){
 });
 
 function selectAlumno(id){
+  // Si hay un push pendiente por debounce, ejecutarlo inmediatamente antes de cambiar de alumno
+  if(_fbAutoSaveTimer){ clearTimeout(_fbAutoSaveTimer); _fbAutoSaveTimer=null; if(currentId) _fbSaveAlumnoOnly(currentId); }
   currentId=id;renderList();
   document.getElementById('welcome-msg').style.display='none';
   document.getElementById('informe-container').style.display='block';
@@ -1994,7 +2010,7 @@ function changeSemN(newVal){
   if(oldIsS2){ if(ob)a.obs_n_s2=ob.value; if(as)a.asistencia_s2=as.value; if(fd)a.fecha_n_s2=fd; }
   else        { if(ob)a.obs_n=ob.value;    if(as)a.asistencia=as.value;    if(fd)a.fecha_n=fd;    }
   a.semestre_n=newVal;
-  saveDB();
+  _saveCurrentAlumno();
   renderInforme();
 }
 
@@ -2021,7 +2037,7 @@ function changeSemP(newVal){
   if(oldIsS2){ if(ob)a.obs_p_s2=ob.value; if(fd)a.fecha_p_s2=fd; }
   else        { if(ob)a.obs_p=ob.value;    if(fd)a.fecha_p=fd;    }
   a.semestre_p=newVal;
-  saveDB();
+  _saveCurrentAlumno();
   renderInforme();
 }
 
@@ -2038,7 +2054,7 @@ function changeSemNT(newVal){
   const ob=document.getElementById('obs-nt');
   if(ob){if(!a.obs_nt)a.obs_nt={};a.obs_nt[oldKey]=ob.value;}
   a.semestre_nt=newVal;
-  saveDB();
+  _saveCurrentAlumno();
   renderInforme();
 }
 
@@ -2129,7 +2145,7 @@ function collectCurrentData(){
     const sem2=document.getElementById('sem-nt');if(sem2)a.semestre_nt=sem2.value;
     const niv=document.getElementById('niv-nt');if(niv)a.nivel=niv.value;
   }
-  saveDB();
+  _saveCurrentAlumno();
 }
 setInterval(()=>{if(currentId&&['notas','pers','nt'].includes(currentTab))collectCurrentData();},2500);
 
@@ -2635,7 +2651,7 @@ function buildAnualHTML(a){
     </tr>`;
   }).join('');
   const promVal=a.promovido||'';
-  const promSel=`<select id="anual-promovido" onchange="db.alumnos[currentId].promovido=this.value;saveDB();toast('Guardado ✓')"
+  const promSel=`<select id="anual-promovido" onchange="db.alumnos[currentId].promovido=this.value;_saveCurrentAlumno();toast('Guardado ✓')"
     style="border:1.5px solid var(--border);border-radius:5px;padding:6px 12px;
     font-size:13px;font-weight:600;color:#111;background:#fff;cursor:pointer;outline:none">
     <option value="">— Seleccionar —</option>
@@ -2704,7 +2720,7 @@ function saveAnualPers(idx,val){
   const a=db.alumnos[currentId];
   if(!a.personalidad_s2)a.personalidad_s2={};
   a.personalidad_s2[idx]=val;
-  saveDB();toast('Guardado ✓');
+  _saveCurrentAlumno();toast('Guardado ✓');
 }
 function buildAnualPersHTML(a){
   // Editable: admin, superadmin, prof con jefatura sobre este curso
@@ -2786,7 +2802,7 @@ function saveAnualNT(key,val){
   const a=db.alumnos[currentId];
   if(!a.nt2)a.nt2={};
   a.nt2[key]=val;
-  saveDB();toast('Guardado ✓');
+  _saveCurrentAlumno();toast('Guardado ✓');
 }
 function buildAnualNTHTML(a){
   // Editable: nt (educadoras), admin, superadmin
