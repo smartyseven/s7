@@ -3499,7 +3499,66 @@ function _importCardHTML(){
     +'</div></div>';
 }
 function _adminExtraHTML(){
-  return _auditCardHTML() + _firebaseCardHTML() + _backupsCardHTML();
+  return _auditCardHTML() + _firebaseCardHTML() + _backupsCardHTML() + _localBackupCardHTML();
+}
+function _localBackupCardHTML(){
+  return '<div class="admin-card" style="margin-top:14px">'
+    +'<div class="admin-card-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:15px;height:15px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Respaldo local en tu computador</div>'
+    +'<div class="admin-card-body">'
+    +'<p style="font-size:12px;color:#787774;margin-bottom:10px">Descarga una copia de todos los datos a tu Mac. Guarda el archivo en un lugar seguro. Puedes restaurarlo si algo sale mal.</p>'
+    +'<button class="btn" style="font-size:12px;background:#1B5E20" onclick="_descargarBackupLocal()">Descargar respaldo ahora</button>'
+    +'&nbsp;&nbsp;'
+    +'<label style="display:inline-block">'
+    +'<button class="btn btn-outline" style="font-size:12px;color:#C62828;border-color:#C62828" onclick="document.getElementById(\'input-restore-local\').click()">Restaurar desde archivo</button>'
+    +'</label>'
+    +'<input type="file" id="input-restore-local" accept=".json" style="display:none" onchange="_restaurarBackupLocal(this)">'
+    +'</div></div>';
+}
+function _descargarBackupLocal(){
+  var total=db.alumnos?Object.keys(db.alumnos).length:0;
+  if(total===0){ toast('No hay datos para descargar','err'); return; }
+  var now=new Date();
+  var fecha=now.getFullYear()+'-'
+    +String(now.getMonth()+1).padStart(2,'0')+'-'
+    +String(now.getDate()).padStart(2,'0')+'_'
+    +String(now.getHours()).padStart(2,'0')+'-'
+    +String(now.getMinutes()).padStart(2,'0');
+  var blob=new Blob([JSON.stringify(db,null,2)],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='respaldo_escuela_'+fecha+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  toast('Respaldo descargado: '+total+' alumnos ✓');
+  logAudit('respaldo_local','Descargado respaldo con '+total+' alumnos — '+fecha);
+}
+function _restaurarBackupLocal(input){
+  var file=input.files[0];
+  if(!file){ return; }
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(!data.alumnos){ toast('Archivo no válido — no tiene datos de alumnos','err'); return; }
+      var total=Object.keys(data.alumnos).length;
+      if(!confirm('¿Restaurar respaldo con '+total+' alumnos?\nEsto reemplazará los datos actuales.\n\nEsta acción no se puede deshacer.'))return;
+      db=data;
+      if(!db.alumnos) db.alumnos={};
+      Object.keys(db.alumnos).forEach(function(k){ _normalizeAlumno(db.alumnos[k]); });
+      db._ts=Date.now();
+      try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(ex){}
+      if(_fbEnabled&&_fbDB&&_fbSynced){
+        _fbOwnSave=true;
+        _fbDB.ref('db').set(db)
+          .then(function(){ setTimeout(function(){_fbOwnSave=false;},4000); })
+          .catch(function(e){ _fbOwnSave=false; });
+      }
+      toast('Restaurado: '+total+' alumnos ✓');
+      renderList(); renderAdmin();
+      logAudit('restaurar_local','Restaurado desde archivo local — '+total+' alumnos');
+    }catch(ex){ toast('Error al leer el archivo','err'); }
+  };
+  reader.readAsText(file);
+  input.value='';
 }
 function _backupsCardHTML(){
   return '<div class="admin-card" style="margin-top:14px" id="backups-card">'
