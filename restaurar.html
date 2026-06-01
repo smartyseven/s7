@@ -4,20 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Restaurar Datos — Escuela México</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 body{font-family:Arial,sans-serif;padding:30px;background:#f5f5f5;text-align:center}
 h2{color:#1B5E20}
-.box{background:#fff;border-radius:8px;padding:30px;max-width:500px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,.1)}
-.btn{background:#1B5E20;color:#fff;border:none;padding:14px 28px;border-radius:6px;font-size:16px;cursor:pointer;margin-top:16px;display:inline-block}
-#msg{margin-top:20px;font-size:14px;color:#555;line-height:1.6}
+.box{background:#fff;border-radius:8px;padding:30px;max-width:520px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,.1)}
 #zona{border:2px dashed #ccc;border-radius:8px;padding:30px;margin-top:20px;cursor:pointer;color:#888;font-size:14px}
 #zona:hover{border-color:#1B5E20;color:#1B5E20}
+#msg{margin-top:20px;font-size:14px;color:#555;line-height:1.8}
+.ok{color:green;font-weight:bold}
+.err{color:red;font-weight:bold}
+a.btn{background:#1B5E20;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:14px;font-size:15px}
 </style>
 </head>
 <body>
 <div class="box">
   <h2>Restaurar Datos</h2>
-  <p style="font-size:13px;color:#555">Selecciona el archivo de respaldo <b>.json</b> para restaurar los datos en este computador.</p>
+  <p style="font-size:13px;color:#555">Selecciona el archivo <b>.json</b> de respaldo. Esto restaurará los datos en este computador <b>y en Firebase</b> para que todos los computadores los reciban.</p>
   <div id="zona" onclick="document.getElementById('inp').click()">
     Haz clic aquí y selecciona el archivo<br><b>respaldo_escuela_....json</b>
   </div>
@@ -25,23 +29,55 @@ h2{color:#1B5E20}
   <div id="msg"></div>
 </div>
 <script>
+var DB_KEY='escuela_mexico_db';
+
+function log(txt){ document.getElementById('msg').innerHTML=txt; }
+
 function cargar(input){
   var file=input.files[0]; if(!file)return;
-  var msg=document.getElementById('msg');
-  msg.innerHTML='Leyendo archivo...';
+  log('Leyendo archivo...');
   var r=new FileReader();
   r.onload=function(e){
     try{
       var datos=JSON.parse(e.target.result);
-      if(!datos.alumnos){msg.innerHTML='<b style="color:red">Error: el archivo no tiene datos de alumnos.</b>';return;}
+      if(!datos.alumnos){log('<span class="err">Error: el archivo no tiene datos de alumnos.</span>');return;}
       var total=Object.keys(datos.alumnos).length;
       var conNotas=Object.values(datos.alumnos).filter(function(a){return a.notas&&Object.keys(a.notas).length>0;}).length;
       var fecha=datos._ts?new Date(datos._ts).toLocaleString('es-CL'):'desconocida';
-      if(!confirm('Restaurar este respaldo?\n\nFecha: '+fecha+'\nAlumnos: '+total+'\nCon notas: '+conNotas+'\n\nEsto reemplazara los datos actuales.')){msg.innerHTML='Cancelado.';return;}
+      if(!confirm('Restaurar este respaldo?\n\nFecha: '+fecha+'\nAlumnos: '+total+'\nCon notas: '+conNotas+'\n\nEsto reemplazara los datos en TODOS los computadores via Firebase.')){log('Cancelado.');return;}
       datos._ts=Date.now();
-      localStorage.setItem('escuela_mexico_db',JSON.stringify(datos));
-      msg.innerHTML='<b style="color:green">Datos restaurados: '+total+' alumnos ('+conNotas+' con notas).</b><br><br><a href="sistema.html" style="background:#1B5E20;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;margin-top:10px">Ir al sistema ahora</a>';
-    }catch(ex){msg.innerHTML='<b style="color:red">Error: '+ex.message+'</b>';}
+      // 1. Guardar en localStorage
+      localStorage.setItem(DB_KEY,JSON.stringify(datos));
+      log('✓ Guardado localmente...<br>Conectando a Firebase...');
+      // 2. Intentar subir a Firebase
+      var cfg=null;
+      try{cfg=JSON.parse(localStorage.getItem('firebaseCfg')||'null');}catch(ex){}
+      if(cfg&&cfg.apiKey&&cfg.databaseURL){
+        try{
+          var app=firebase.apps.length?firebase.apps[0]:firebase.initializeApp(cfg);
+          var db=firebase.database(app);
+          firebase.auth(app).signInAnonymously().catch(function(){});
+          db.ref('db').set(datos)
+            .then(function(){
+              log('<span class="ok">✓ Datos restaurados correctamente!</span><br>'
+                +'Alumnos: <b>'+total+'</b> | Con notas: <b>'+conNotas+'</b><br>'
+                +'Los datos fueron subidos a Firebase — todos los computadores los recibirán.<br><br>'
+                +'<a href="sistema.html" class="btn">Ir al sistema ahora →</a>');
+            })
+            .catch(function(err){
+              log('<span class="ok">✓ Guardado localmente</span> (Firebase falló: '+err.message+')<br><br>'
+                +'<a href="sistema.html" class="btn">Ir al sistema ahora →</a>');
+            });
+        }catch(ex){
+          log('<span class="ok">✓ Guardado localmente</span> (Firebase no disponible)<br><br>'
+            +'<a href="sistema.html" class="btn">Ir al sistema ahora →</a>');
+        }
+      } else {
+        log('<span class="ok">✓ Guardado localmente</span><br>'
+          +'(Firebase no configurado en este computador — abre el sistema y súbelo desde el panel admin)<br><br>'
+          +'<a href="sistema.html" class="btn">Ir al sistema ahora →</a>');
+      }
+    }catch(ex){log('<span class="err">Error al leer el archivo: '+ex.message+'</span>');}
   };
   r.readAsText(file);
   input.value='';
