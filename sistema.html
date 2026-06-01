@@ -906,22 +906,43 @@ const AUTH_KEY = 'escuela_auth';
 const DB_KEY   = 'escuela_mexico_db';
 
 // ═══ AUTO-ACTUALIZACIÓN ═══
-// Verifica cada 5 minutos si hay una versión nueva del sistema y recarga automáticamente
-const _APP_VERSION = '20260601-v6';
-(function _checkVersion(){
+const _APP_VERSION = '20260601-v8';
+
+// 1. Verificación INMEDIATA al cargar — antes de que el usuario haga cualquier cosa
+(function _checkVersionAhora(){
+  // Evitar loop infinito: si ya recargamos en esta sesión, no volver a hacerlo
+  if(sessionStorage.getItem('_justReloaded')==='1'){
+    sessionStorage.removeItem('_justReloaded');
+    return;
+  }
+  fetch(location.href+'?nocache='+Date.now(),{cache:'no-store'})
+    .then(function(r){return r.text();})
+    .then(function(html){
+      var m=html.match(/const _APP_VERSION = '([^']+)'/);
+      if(m && m[1] && m[1]!==_APP_VERSION){
+        console.log('[Sistema] Versión nueva detectada al cargar ('+m[1]+'), actualizando...');
+        sessionStorage.setItem('_justReloaded','1');
+        location.reload(true);
+      }
+    }).catch(function(){});
+})();
+
+// 2. Verificación periódica cada 3 minutos — para usuarios que ya tienen la página abierta
+(function _checkVersionPeriodico(){
   setTimeout(function(){
-    fetch(location.href+'?v='+Date.now(),{cache:'no-store'})
+    fetch(location.href+'?nocache='+Date.now(),{cache:'no-store'})
       .then(function(r){return r.text();})
       .then(function(html){
         var m=html.match(/const _APP_VERSION = '([^']+)'/);
         if(m && m[1] && m[1]!==_APP_VERSION){
-          console.log('[Sistema] Nueva versión detectada ('+m[1]+'), recargando...');
+          console.log('[Sistema] Versión nueva detectada ('+m[1]+'), actualizando...');
+          sessionStorage.setItem('_justReloaded','1');
           location.reload(true);
         } else {
-          _checkVersion(); // volver a verificar en 5 min
+          _checkVersionPeriodico();
         }
-      }).catch(function(){ _checkVersion(); });
-  }, 5*60*1000); // cada 5 minutos
+      }).catch(function(){ _checkVersionPeriodico(); });
+  }, 3*60*1000); // cada 3 minutos
 })();
 
 // ═══ FIREBASE STATE ═══
