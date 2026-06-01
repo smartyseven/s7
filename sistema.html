@@ -1401,12 +1401,36 @@ function _setupFBListeners(){
         return;
       }
       // ── GUARDIA 2: snapshot más antiguo que lo que ya tenemos ─────────
-      // Tolerancia de 10 s: si Firebase trae datos más de 10 s más viejos que
-      // los nuestros, es un snapshot obsoleto (reconexión, caché, etc.) → ignorar.
-      // Si no tenemos ts local (primera carga), aceptar siempre.
       if(locTs > 0 && fbTs > 0 && fbTs < locTs - 10000){
         console.warn('[Firebase] Rechazado: snapshot de Firebase ('+new Date(fbTs).toLocaleTimeString()+
           ') es más antiguo que el local ('+new Date(locTs).toLocaleTimeString()+'). Datos locales preservados.');
+        return;
+      }
+      // ── GUARDIA 3: Firebase trae menos notas que las locales → ignorar ─
+      function _contarNotas(alumnos){
+        if(!alumnos) return 0;
+        var n=0;
+        Object.values(alumnos).forEach(function(a){
+          if(a.notas)    n+=Object.keys(a.notas).length;
+          if(a.notas_s2) n+=Object.keys(a.notas_s2).length;
+        });
+        return n;
+      }
+      var fbNotas  = _contarNotas(data.alumnos);
+      var locNotas = _contarNotas(db.alumnos);
+      if(locNotas > 0 && fbNotas < locNotas){
+        console.warn('[Firebase] Rechazado: Firebase tiene '+fbNotas+' notas, local tiene '+locNotas+'. Datos locales preservados.');
+        // Merge: conservar datos locales pero fusionar alumno por alumno lo que Firebase tiene de más
+        if(data.alumnos && fbCount >= locCount){
+          Object.keys(data.alumnos).forEach(function(id){
+            if(!db.alumnos[id]){
+              db.alumnos[id]=data.alumnos[id]; // alumno nuevo en Firebase, agregarlo
+            }
+            // Si el alumno existe en ambos, mantener el local (tiene más notas)
+          });
+          db._ts=Date.now();
+          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(ex){}
+        }
         return;
       }
 
