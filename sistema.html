@@ -931,6 +931,7 @@ let _fbEnabled = false;
 let _auditCache = [];   // cache del log mantenido por el listener de Firebase
 let _fbOwnSave     = false; // evita re-render en el propio guardado de alumnos
 let _fbOwnAuthSave = false; // evita sobrescritura en el propio guardado de auth
+let _fbMaxNotasVisto = 0;  // máximo de notas vistas en Firebase — nunca bajamos de esto
 let _fbOwnAuthSaveTimer = null; // timer rolling para reset de _fbOwnAuthSave
 let _fbSynced = false; // true cuando Firebase confirma al menos una sincronización inicial
 
@@ -1308,6 +1309,16 @@ function saveDB(){
       }
     }catch(ex){}
   }
+  // ── GUARDIA ANTI-PÉRDIDA: nunca subir a Firebase si tenemos menos notas que el máximo visto ──
+  function _cntNotas(al){ if(!al)return 0; var n=0; Object.values(al).forEach(function(a){ if(a.notas)n+=Object.keys(a.notas).length; if(a.notas_s2)n+=Object.keys(a.notas_s2).length; }); return n; }
+  var _localNotas=_cntNotas(db.alumnos);
+  if(_fbEnabled && _fbSynced && _fbMaxNotasVisto>0 && _localNotas < _fbMaxNotasVisto){
+    console.warn('[saveDB] BLOQUEADO: local tiene '+_localNotas+' notas, máximo visto es '+_fbMaxNotasVisto+'. No se sube a Firebase para no perder datos.');
+    db._ts=Date.now();
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(ex){}
+    return;
+  }
+  _fbMaxNotasVisto=Math.max(_fbMaxNotasVisto,_localNotas);
   // Estampar timestamp en cada guardado — permite al listener detectar si Firebase trae datos más viejos
   db._ts = Date.now();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(ex){}
@@ -1460,6 +1471,8 @@ function _setupFBListeners(){
       if(!db.alumnos) db.alumnos={};
       // Normalizar cada alumno (Firebase elimina objetos vacios)
       Object.keys(db.alumnos).forEach(function(k){ _normalizeAlumno(db.alumnos[k]); });
+      // Actualizar el máximo de notas visto — nunca bajaremos de esto en saveDB()
+      _fbMaxNotasVisto = Math.max(_fbMaxNotasVisto, fbNotas);
       // Actualizar localStorage
       try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(ex){}
       // Backup de seguridad con fecha y cantidad de alumnos
