@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Sistema de Informes — Escuela México Agua de la Gloria</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -901,6 +904,25 @@ document.querySelectorAll('img').forEach(i=>i.src=LOGO_SRC);
 // ═══════════════════════════════════════════════════════
 const AUTH_KEY = 'escuela_auth';
 const DB_KEY   = 'escuela_mexico_db';
+
+// ═══ AUTO-ACTUALIZACIÓN ═══
+// Verifica cada 5 minutos si hay una versión nueva del sistema y recarga automáticamente
+const _APP_VERSION = '20260601-v6';
+(function _checkVersion(){
+  setTimeout(function(){
+    fetch(location.href+'?v='+Date.now(),{cache:'no-store'})
+      .then(function(r){return r.text();})
+      .then(function(html){
+        var m=html.match(/const _APP_VERSION = '([^']+)'/);
+        if(m && m[1] && m[1]!==_APP_VERSION){
+          console.log('[Sistema] Nueva versión detectada ('+m[1]+'), recargando...');
+          location.reload(true);
+        } else {
+          _checkVersion(); // volver a verificar en 5 min
+        }
+      }).catch(function(){ _checkVersion(); });
+  }, 5*60*1000); // cada 5 minutos
+})();
 
 // ═══ FIREBASE STATE ═══
 let _fbApp = null;
